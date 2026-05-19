@@ -79,6 +79,26 @@ ensure_backend_env() {
   esac
 }
 
+wait_for_backend() {
+  log "Waiting for backend health"
+  local attempt
+  for attempt in $(seq 1 30); do
+    if compose exec -T backend python - <<'PY' >/dev/null 2>&1
+import urllib.request
+urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=3).read()
+PY
+    then
+      log "Backend is healthy"
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "Backend did not become healthy in time" >&2
+  compose logs --tail 120 backend || true
+  exit 1
+}
+
 compose() {
   if docker compose version >/dev/null 2>&1; then
     docker compose "$@"
@@ -162,6 +182,7 @@ ensure_backend_env
 log "Building and restarting backend only"
 cd "$BACKEND_DIR"
 compose up -d --build backend
+wait_for_backend
 
 if [ -f "scripts/seed_demo_match_pool.py" ]; then
   compose exec -T backend python scripts/seed_demo_match_pool.py || true
