@@ -34,7 +34,8 @@ jobs:
             --exclude='*.pyc' \
             --exclude='data/faraway_app.db-wal' \
             --exclude='data/faraway_app.db-shm' \
-            -czf backend-release.tar.gz .
+            -czf "$RUNNER_TEMP/backend-release.tar.gz" .
+          cp "$RUNNER_TEMP/backend-release.tar.gz" backend-release.tar.gz
 
       - name: Upload release to Aliyun
         uses: appleboy/scp-action@v0.1.7
