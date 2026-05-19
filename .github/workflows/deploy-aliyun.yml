@@ -37,23 +37,41 @@ jobs:
             -czf "$RUNNER_TEMP/backend-release.tar.gz" .
           cp "$RUNNER_TEMP/backend-release.tar.gz" backend-release.tar.gz
 
+      - name: Validate deployment secrets
+        env:
+          DEPLOY_HOST: ${{ secrets.ALIYUN_HOST || secrets.SERVER_HOST }}
+          DEPLOY_USER: ${{ secrets.ALIYUN_USER || secrets.SERVER_USER }}
+          DEPLOY_KEY: ${{ secrets.ALIYUN_SSH_KEY || secrets.SERVER_SSH_KEY || secrets.SSH_PRIVATE_KEY }}
+          DEPLOY_PASSWORD: ${{ secrets.ALIYUN_PASSWORD || secrets.SERVER_PASSWORD || secrets.SSH_PASSWORD }}
+          DEPLOY_ROOT: ${{ secrets.ALIYUN_APP_ROOT }}
+        run: |
+          test -n "$DEPLOY_HOST" || (echo "Missing secret: ALIYUN_HOST or SERVER_HOST" >&2; exit 1)
+          test -n "$DEPLOY_USER" || (echo "Missing secret: ALIYUN_USER or SERVER_USER" >&2; exit 1)
+          test -n "$DEPLOY_ROOT" || (echo "Missing secret: ALIYUN_APP_ROOT" >&2; exit 1)
+          if [ -z "$DEPLOY_KEY" ] && [ -z "$DEPLOY_PASSWORD" ]; then
+            echo "Missing server login credential: set ALIYUN_SSH_KEY/SERVER_SSH_KEY/SSH_PRIVATE_KEY or ALIYUN_PASSWORD/SERVER_PASSWORD/SSH_PASSWORD" >&2
+            exit 1
+          fi
+
       - name: Upload release to Aliyun
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.ALIYUN_HOST }}
-          username: ${{ secrets.ALIYUN_USER }}
-          key: ${{ secrets.ALIYUN_SSH_KEY }}
-          port: 22
+          host: ${{ secrets.ALIYUN_HOST || secrets.SERVER_HOST }}
+          username: ${{ secrets.ALIYUN_USER || secrets.SERVER_USER }}
+          key: ${{ secrets.ALIYUN_SSH_KEY || secrets.SERVER_SSH_KEY || secrets.SSH_PRIVATE_KEY }}
+          password: ${{ secrets.ALIYUN_PASSWORD || secrets.SERVER_PASSWORD || secrets.SSH_PASSWORD }}
+          port: ${{ secrets.ALIYUN_SSH_PORT || secrets.SERVER_SSH_PORT || '22' }}
           source: "backend-release.tar.gz"
           target: "${{ secrets.ALIYUN_APP_ROOT }}"
 
       - name: Deploy on Aliyun
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.ALIYUN_HOST }}
-          username: ${{ secrets.ALIYUN_USER }}
-          key: ${{ secrets.ALIYUN_SSH_KEY }}
-          port: 22
+          host: ${{ secrets.ALIYUN_HOST || secrets.SERVER_HOST }}
+          username: ${{ secrets.ALIYUN_USER || secrets.SERVER_USER }}
+          key: ${{ secrets.ALIYUN_SSH_KEY || secrets.SERVER_SSH_KEY || secrets.SSH_PRIVATE_KEY }}
+          password: ${{ secrets.ALIYUN_PASSWORD || secrets.SERVER_PASSWORD || secrets.SSH_PASSWORD }}
+          port: ${{ secrets.ALIYUN_SSH_PORT || secrets.SERVER_SSH_PORT || '22' }}
           script: |
             set -Eeuo pipefail
             APP_ROOT="${{ secrets.ALIYUN_APP_ROOT }}"
