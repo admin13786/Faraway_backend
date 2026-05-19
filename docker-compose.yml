@@ -1,0 +1,49 @@
+services:
+  backend:
+    image: faraway-backend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_IMAGE: "${PYTHON_IMAGE:-python:3.10-slim}"
+    container_name: faraway-backend
+    ports:
+      - "${BACKEND_PORT:-8011}:8000"
+    environment:
+      APP_NAME: "Faraway Backend"
+      ENVIRONMENT: "production"
+      SQLITE_PATH: "/app/data/faraway_app.db"
+      SQLITE_JOURNAL_MODE: "DELETE"
+      SEED_DEMO_DATA: "${SEED_DEMO_DATA:-true}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-[\"*\"]}"
+      DEV_ALLOW_ANON_AUTH: "false"
+      DEV_TRUST_X_USER_HEADERS: "false"
+      AUTH_TOKEN_TTL_HOURS: "${AUTH_TOKEN_TTL_HOURS:-720}"
+      PASSWORD_HASH_ITERATIONS: "${PASSWORD_HASH_ITERATIONS:-120000}"
+      SMS_CODE_TTL_MINUTES: "${SMS_CODE_TTL_MINUTES:-10}"
+      SECRET_KEY: "${SECRET_KEY:-faraway-local-dev-secret-change-me}"
+      DASHSCOPE_API_KEY: "${DASHSCOPE_API_KEY:-}"
+      DASHSCOPE_BASE_URL: "${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}"
+      DASHSCOPE_MODEL: "${DASHSCOPE_MODEL:-qwen-plus}"
+      WECHAT_APP_ID: "${WECHAT_APP_ID:-}"
+      WECHAT_APP_SECRET: "${WECHAT_APP_SECRET:-}"
+      OSS_ACCESS_KEY_ID: "${OSS_ACCESS_KEY_ID:-}"
+      OSS_ACCESS_KEY_SECRET: "${OSS_ACCESS_KEY_SECRET:-}"
+      OSS_ENDPOINT: "${OSS_ENDPOINT:-https://oss-cn-hangzhou.aliyuncs.com}"
+      OSS_BUCKET_NAME: "${OSS_BUCKET_NAME:-}"
+      OSS_PUBLIC_BASE_URL: "${OSS_PUBLIC_BASE_URL:-}"
+      OSS_UPLOAD_PREFIX: "${OSS_UPLOAD_PREFIX:-faraway}"
+      OSS_SIGN_EXPIRE_SECONDS: "${OSS_SIGN_EXPIRE_SECONDS:-3600}"
+      LOCAL_MEDIA_DIR: "/app/data/uploads"
+      LOCAL_MEDIA_URL_PREFIX: "/media"
+      MAX_IMAGE_SIZE_MB: "${MAX_IMAGE_SIZE_MB:-10}"
+      MAX_VIDEO_SIZE_MB: "${MAX_VIDEO_SIZE_MB:-300}"
+    volumes:
+      - ./data:/app/data
+    networks:
+      - faraway-net
+    restart: unless-stopped
+
+networks:
+  faraway-net:
+    name: faraway-net
