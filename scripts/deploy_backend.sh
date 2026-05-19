@@ -31,6 +31,51 @@ compose() {
   fi
 }
 
+assert_safe_app_root() {
+  if [ -z "$APP_ROOT" ]; then
+    echo "APP_ROOT is empty; refuse to deploy" >&2
+    exit 1
+  fi
+  case "$APP_ROOT" in
+    /*) ;;
+    *)
+      echo "APP_ROOT must be an absolute path: $APP_ROOT" >&2
+      exit 1
+      ;;
+  esac
+  local resolved_app_root
+  local resolved_home
+  resolved_app_root="$(mkdir -p "$APP_ROOT" && cd "$APP_ROOT" && pwd -P)"
+  resolved_home="$(cd "$HOME" && pwd -P)"
+  case "$resolved_app_root" in
+    "/"|"/home"|"$resolved_home"|"$resolved_home/"*)
+      if [ "$resolved_app_root" != "$resolved_home/faraway-project" ]; then
+        echo "Unsafe APP_ROOT: $resolved_app_root. Use a dedicated project directory such as $resolved_home/faraway-project" >&2
+        exit 1
+      fi
+      ;;
+  esac
+  APP_ROOT="$resolved_app_root"
+  BACKEND_DIR="$APP_ROOT/backend"
+  RELEASE_TAR="${1:-$APP_ROOT/backend-release.tar.gz}"
+}
+
+assert_safe_child_dir() {
+  local child="$1"
+  local resolved_child
+  resolved_child="$(mkdir -p "$child" && cd "$child" && pwd -P)"
+  case "$resolved_child" in
+    "$APP_ROOT"/backend) ;;
+    *)
+      echo "Unsafe backend directory: $resolved_child" >&2
+      exit 1
+      ;;
+  esac
+  BACKEND_DIR="$resolved_child"
+}
+
+assert_safe_app_root "$@"
+assert_safe_child_dir "$BACKEND_DIR"
 require_cmd docker
 require_file "$RELEASE_TAR"
 
