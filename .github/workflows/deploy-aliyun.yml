@@ -1,0 +1,67 @@
+name: Deploy Backend to Aliyun
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: faraway-backend-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python syntax check
+        run: python -m py_compile app/main.py app/routers/frontend_api.py app/services/post_recommendation.py
+
+      - name: Build Docker image
+        run: docker compose build backend
+
+      - name: Pack backend release
+        run: |
+          tar \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.venv' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='data/faraway_app.db-wal' \
+            --exclude='data/faraway_app.db-shm' \
+            -czf backend-release.tar.gz .
+
+      - name: Upload release to Aliyun
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.ALIYUN_HOST }}
+          username: ${{ secrets.ALIYUN_USER }}
+          key: ${{ secrets.ALIYUN_SSH_KEY }}
+          port: 22
+          source: "backend-release.tar.gz"
+          target: "${{ secrets.ALIYUN_APP_ROOT }}"
+
+      - name: Deploy on Aliyun
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ALIYUN_HOST }}
+          username: ${{ secrets.ALIYUN_USER }}
+          key: ${{ secrets.ALIYUN_SSH_KEY }}
+          port: 22
+          script: |
+            set -Eeuo pipefail
+            APP_ROOT="${{ secrets.ALIYUN_APP_ROOT }}"
+            if [ -z "$APP_ROOT" ]; then
+              echo "Missing GitHub Secret: ALIYUN_APP_ROOT" >&2
+              exit 1
+            fi
+            export APP_ROOT
+            TMP_DIR="$(mktemp -d)"
+            trap 'rm -rf "$TMP_DIR"' EXIT
+            tar -xzf "$APP_ROOT/backend-release.tar.gz" -C "$TMP_DIR" scripts/deploy_backend.sh
+            bash "$TMP_DIR/scripts/deploy_backend.sh" "$APP_ROOT/backend-release.tar.gz"

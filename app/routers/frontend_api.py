@@ -43,6 +43,7 @@ from app.services.auth_service import (
 from app.services.oss_service import sign_read_url, upload_media
 from app.services.post_recommendation import (
     analyze_content,
+    get_hidden_target_ids,
     get_recommendation_trace,
     recommend_feed,
     save_recommendation_event,
@@ -1722,8 +1723,20 @@ def analyze_strategy_ai_profile(strategy_id: str, current_user: CurrentUser = Au
 
 
 @router.get("/strategies")
-def get_strategy_list(keyword: str = "", category: str = "", page: int = 1, pageSize: int = 10) -> dict:
-    items = [strategy_model(item) for item in store.list("fe_strategies") if is_published(item)]
+def get_strategy_list(
+    keyword: str = "",
+    category: str = "",
+    page: int = 1,
+    pageSize: int = 10,
+    authorization: str | None = Header(default=None),
+) -> dict:
+    current_user = optional_user_from_authorization(authorization)
+    hidden_ids = get_hidden_target_ids(current_user.uid if current_user else None, "strategy")
+    items = [
+        strategy_model(item, current_user)
+        for item in store.list("fe_strategies")
+        if is_published(item) and str(item.get("id")) not in hidden_ids
+    ]
     if keyword:
         key = keyword.lower()
         items = [
@@ -1852,8 +1865,20 @@ def delete_strategy(strategy_id: str, current_user: CurrentUser = AuthUser) -> d
 
 
 @router.get("/posts")
-def get_post_list(type: str = "all", keyword: str = "", page: int = 1, pageSize: int = 10) -> dict:
-    items = [post_model(item) for item in store.list("fe_posts") if is_published(item)]
+def get_post_list(
+    type: str = "all",
+    keyword: str = "",
+    page: int = 1,
+    pageSize: int = 10,
+    authorization: str | None = Header(default=None),
+) -> dict:
+    current_user = optional_user_from_authorization(authorization)
+    hidden_ids = get_hidden_target_ids(current_user.uid if current_user else None, "post")
+    items = [
+        post_model(item, current_user)
+        for item in store.list("fe_posts")
+        if is_published(item) and str(item.get("id")) not in hidden_ids
+    ]
     if type in ("strategy", "vlog"):
         items = [item for item in items if item.get("type") == type]
     if keyword:

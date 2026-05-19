@@ -423,6 +423,23 @@ def save_recommendation_event(
     )
 
 
+def get_hidden_target_ids(user_id: str | None, target_type: str | None = None) -> set[str]:
+    if not user_id:
+        return set()
+    hidden: set[str] = set()
+    for event in store.list(RECOMMENDATION_EVENTS_COLLECTION):
+        if event.get("userId") != user_id:
+            continue
+        if event.get("eventType") not in {"dislike", "report"}:
+            continue
+        if target_type and event.get("targetType") != target_type:
+            continue
+        target_id = str(event.get("targetId", ""))
+        if target_id:
+            hidden.add(target_id)
+    return hidden
+
+
 def build_user_interest_profile(user_id: str | None) -> dict:
     if not user_id:
         return {
@@ -608,9 +625,16 @@ def _diversity_rerank(scored: list[dict]) -> list[dict]:
 def recommend_feed(user_id: str | None, *, page: int = 1, page_size: int = 10, recent_target_id: str = "") -> dict:
     started = datetime.now(timezone.utc)
     user_profile = build_user_interest_profile(user_id)
+    hidden_by_type = {
+        "strategy": get_hidden_target_ids(user_id, "strategy"),
+        "post": get_hidden_target_ids(user_id, "post"),
+    }
     candidates = _list_content_candidates()
     scored: list[dict] = []
     for candidate in candidates:
+        target_id = str(candidate["item"].get("id", ""))
+        if target_id in hidden_by_type.get(candidate["targetType"], set()):
+            continue
         features = _candidate_features(candidate, user_profile, recent_target_id)
         scored.append(
             {
