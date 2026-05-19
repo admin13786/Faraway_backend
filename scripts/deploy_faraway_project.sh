@@ -18,6 +18,62 @@ require_cmd() {
   fi
 }
 
+generate_secret_key() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - <<'PY'
+import secrets
+print(secrets.token_hex(32))
+PY
+  else
+    {
+      date +%s%N
+      hostname
+      ps aux 2>/dev/null || true
+    } | sha256sum | awk '{print $1}'
+  fi
+}
+
+set_env_var() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  local escaped
+  escaped="$(printf '%s' "$value" | sed 's/[\/&]/\\&/g')"
+  if grep -qE "^${key}=" "$file"; then
+    sed -i "s/^${key}=.*/${key}=\"${escaped}\"/" "$file"
+  else
+    printf '%s="%s"\n' "$key" "$value" >>"$file"
+  fi
+}
+
+ensure_backend_env() {
+  local env_file="$BACKEND_DIR/.env"
+  if [ ! -f "$env_file" ]; then
+    if [ -f "$BACKEND_DIR/.env.example" ]; then
+      cp "$BACKEND_DIR/.env.example" "$env_file"
+    else
+      touch "$env_file"
+    fi
+  fi
+
+  local current_secret
+  current_secret="$(grep -E '^SECRET_KEY=' "$env_file" | tail -n 1 | cut -d= -f2- | tr -d "\"'" || true)"
+  case "$current_secret" in
+    ""|"change-this-in-production-please-use-a-long-random-secret-key"|"change-this-before-deploying-faraway-backend"|"faraway-local-dev-secret-change-me")
+      set_env_var "$env_file" "SECRET_KEY" "$(generate_secret_key)"
+      log "Generated production SECRET_KEY in backend .env"
+      ;;
+    *)
+      if [ "${#current_secret}" -lt 32 ]; then
+        set_env_var "$env_file" "SECRET_KEY" "$(generate_secret_key)"
+        log "Replaced weak SECRET_KEY in backend .env"
+      fi
+      ;;
+  esac
+}
+
 compose() {
   if docker compose version >/dev/null 2>&1; then
     docker compose "$@"
@@ -105,9 +161,7 @@ clone_or_update "$BACKEND_REPO" "$BACKEND_BRANCH" "$BACKEND_DIR" "backend"
 clone_or_update "$WEB_REPO" "$WEB_BRANCH" "$WEB_DIR" "web_frontend"
 
 mkdir -p "$BACKEND_DIR/data"
-if [ ! -f "$BACKEND_DIR/.env" ]; then
-  cp "$BACKEND_DIR/.env.example" "$BACKEND_DIR/.env"
-fi
+ensure_backend_env
 if [ ! -f "$WEB_DIR/.env" ] && [ -f "$WEB_DIR/.env.example" ]; then
   cp "$WEB_DIR/.env.example" "$WEB_DIR/.env"
 fi
