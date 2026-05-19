@@ -46,4 +46,5 @@ services:
 
 networks:
   faraway-net:
+    external: true
     name: faraway-net
