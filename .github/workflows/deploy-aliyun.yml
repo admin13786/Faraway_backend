@@ -37,7 +37,8 @@ jobs:
             -czf "$RUNNER_TEMP/backend-release.tar.gz" .
           cp "$RUNNER_TEMP/backend-release.tar.gz" backend-release.tar.gz
 
-      - name: Validate deployment secrets
+      - name: Check optional deployment secrets
+        id: deploy_config
         env:
           DEPLOY_HOST: ${{ secrets.ALIYUN_HOST || secrets.SERVER_HOST }}
           DEPLOY_USER: ${{ secrets.ALIYUN_USER || secrets.SERVER_USER }}
@@ -45,15 +46,15 @@ jobs:
           DEPLOY_PASSWORD: ${{ secrets.ALIYUN_PASSWORD || secrets.SERVER_PASSWORD || secrets.SSH_PASSWORD }}
           DEPLOY_ROOT: ${{ secrets.ALIYUN_APP_ROOT }}
         run: |
-          test -n "$DEPLOY_HOST" || (echo "Missing secret: ALIYUN_HOST or SERVER_HOST" >&2; exit 1)
-          test -n "$DEPLOY_USER" || (echo "Missing secret: ALIYUN_USER or SERVER_USER" >&2; exit 1)
-          test -n "$DEPLOY_ROOT" || (echo "Missing secret: ALIYUN_APP_ROOT" >&2; exit 1)
-          if [ -z "$DEPLOY_KEY" ] && [ -z "$DEPLOY_PASSWORD" ]; then
-            echo "Missing server login credential: set ALIYUN_SSH_KEY/SERVER_SSH_KEY/SSH_PRIVATE_KEY or ALIYUN_PASSWORD/SERVER_PASSWORD/SSH_PASSWORD" >&2
-            exit 1
+          if [ -n "$DEPLOY_HOST" ] && [ -n "$DEPLOY_USER" ] && [ -n "$DEPLOY_ROOT" ] && { [ -n "$DEPLOY_KEY" ] || [ -n "$DEPLOY_PASSWORD" ]; }; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Aliyun deploy secrets are incomplete. Build checks passed, deployment is skipped. Set ALIYUN_HOST, ALIYUN_USER, ALIYUN_APP_ROOT and ALIYUN_SSH_KEY or ALIYUN_PASSWORD to enable GitHub Actions deployment."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload release to Aliyun
+        if: steps.deploy_config.outputs.enabled == 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.ALIYUN_HOST || secrets.SERVER_HOST }}
@@ -65,6 +66,7 @@ jobs:
           target: "${{ secrets.ALIYUN_APP_ROOT }}"
 
       - name: Deploy on Aliyun
+        if: steps.deploy_config.outputs.enabled == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.ALIYUN_HOST || secrets.SERVER_HOST }}
